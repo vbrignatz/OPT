@@ -26,7 +26,7 @@ import argparse
 import subprocess
 import os
 
-def generate(dir):
+def generate(dir, verbose=False):
 
     os.makedirs(f"{dir}", exist_ok=True)
 
@@ -56,48 +56,102 @@ def generate(dir):
 
     print(f"Genetrated files in {dir}{folder}")
 
-def send(dir, text):
+def send(dir, text, verbose=False):
+    """
+    dir should be /pads/0000/
+    """
+
     # TODO: check that dir exist
 
-    # find smallest nb dir
-    ldir = []
-    for d in os.listdir(dir):
-        try:
-            ldir.append(int(d))
-        except:
-            pass
+    available_pads = [filename for filename in os.listdir(dir) if filename.endswith("c")]
+    if len(available_pads) <= 0:
+        raise Warning(f"No available pads found in {dir}")
+    first_available_pad = sorted(available_pads)[0]
 
-    if len(ldir) <= 0:
-        raise Warning(f"No suitable pads folder found in '{dir}'")
+    if verbose:
+        print(f"[S] Using pad : {first_available_pad} in {dir}{folder}")
 
-    folder = f"{min(ldir):04d}/"
+    output_filename = dir.replace('/', '-')+first_available_pad.replace('c', 't')
+    output_data = b''
+    
+    # write preffix
+    with open(dir+first_available_pad.replace('c', 'p'), "rb") as prefix:
+        output_data += prefix.read(48)
 
-    first_available_pad = sorted([filename for filename in os.listdir(f"{dir}{folder}") if filename.endswith("c")])[0]
+    # append cypher msg
+    with open(dir+first_available_pad, "rb") as cypher:
+        cypher_data = cypher.read(len(text))
+    
+    for char, code in zip(text, cypher_data):
+        # code = int.from_bytes(cypher.read(1), "big")
+        byte = (ord(char) + code) % 256
+        output_data += int.to_bytes(byte, 1, "big")
 
-    output_filename = dir.replace('/', '-')+folder.replace('/', '-')+first_available_pad.replace('c', 't')
+    if verbose:
+        print(f"[S] Encrypted data is {output_data[48:]}")
+
+    # append suffix
+    with open(dir+first_available_pad.replace('c', 's'), "rb") as suffix:
+        output_data += suffix.read(48)
+
     with open(output_filename, "wb") as fout:
-        # write preffix
-        with open(dir+folder+first_available_pad.replace('c', 'p'), "rb") as prefix:
-            fout.write(prefix.read(48))
+        fout.write(output_data)
 
-        # append cypher msg
-        with open(dir+folder+first_available_pad, "rb") as cypher:
-            for char in text:
-                code = int.from_bytes(cypher.read(1), "big")
-                byte = (ord(char) + code) % 256
-                fout.write(int.to_bytes(byte, 1, "big"))
-
-        # append suffix
-        with open(dir+folder+first_available_pad.replace('c', 's'), "rb") as suffix:
-            fout.write(suffix.read(48))
+    if verbose:
+        print(f"[S] Wrote encrypted text in {output_filename}")
 
     # TODO: destroy first_available_pad
-    print(f"Wrote OPT text in {output_filename}")
 
 
-def receive(dir, filename):
-    # TODO: implement receive mode
-    pass
+def receive(dir, filename, verbose=False):
+    """
+    dir should be /pads/0000/
+    """
+
+    # read the data from the file
+    with open(filename, "rb") as fin:
+        data = fin.read()
+
+    if verbose:
+        print(f"[R] Red {len(data)} bytes from {filename}")
+
+    # Get prefix and suffix
+    prefix, suffix = data[:48], data[-48:]
+
+    idx = None
+    for pad in [filename for filename in os.listdir(dir) if filename.endswith("p")]:
+        with open(dir+pad, "rb") as file_preffix:
+            if file_preffix.read(48) == prefix:
+                idx = int(pad.replace('p', ''))
+                break
+
+    if idx is None:
+        raise Warning(f"Could not find prefix in {dir}")
+
+    if verbose:
+        print(f"[R] Found idx from prefix : idx={idx}")
+
+    # TODO: also check suffix
+
+    if verbose:
+        print(f"[R] Suffix validated with idx={idx}")
+
+    n_data = len(data) - 48*2
+    with open(dir+f"{idx:02d}c", "rb") as file_cypher:
+        cypher = file_cypher.read(n_data)
+    
+    text = ""
+    for char, code in zip(data[48:-48], cypher):
+        text += chr((char - code) % 256)
+
+    if verbose:
+        print(f"[R] Found message '{text}'")
+
+    with open(filename.replace("t", "m"), "w") as fout:
+        fout.write(text)
+
+    if verbose:
+        print(f"[R] Wrote message in '{filename.replace('t', 'm')}'")
 
 if __name__=="__main__":
 
@@ -118,6 +172,8 @@ if __name__=="__main__":
                         help='If specified, will set script in receive mode  (default is generate)')
     parser.add_argument('-g', "--generate", action="store_true",
                         help='If specified, will set script in generate mode (default is generate)')
+    parser.add_argument('-v', "--verbose", action="store_true",
+                        help='If specified, will print informations about the process')
 
     args = parser.parse_args()
 
@@ -136,10 +192,10 @@ if __name__=="__main__":
             text = args.text
         else:
             text = "test message" # TODO : use standar input
-        send(args.directory, text)
+        send(args.directory, text, args.verbose)
     elif args.receive:
         if not args.filename:
             raise Warning("User should specify a filename when using receive mode")
-        receive(args.directory, args.filename)
+        receive(args.directory, args.filename, args.verbose)
     else:
         generate(args.directory)
