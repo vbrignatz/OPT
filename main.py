@@ -25,6 +25,7 @@ Author : Vincent Brignatz
 import argparse
 import subprocess
 import os
+import sys
 
 def interface_is_up(dir):
     """
@@ -273,7 +274,8 @@ if __name__=="__main__":
         elif args.text:
             text = args.text
         else:
-            text = "test message" # TODO : use standar input
+            # if -t and -f are not specified, read stdin
+            text = sys.stdin.read().rstrip()
         if len(text) > 2000:
             raise Warning("Message too long. Max message lenght is 2000 characters.")
         send(args.directory, text, verbose=args.verbose, no_shred=args.no_shred)
