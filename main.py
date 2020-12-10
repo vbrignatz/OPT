@@ -26,6 +26,26 @@ import argparse
 import subprocess
 import os
 
+def interface_is_up(dir):
+    """
+    Check content of file operstate in dir, return True if content is 'up', False if 'down'.
+
+    Exemple:
+    >>> interface_is_up("/sys/class/net/wlo1/")
+    """
+    if dir[-1] != "/":
+        dir += "/"
+
+    with open(dir+"operstate", "r") as f:
+        data = f.read().rstrip()
+
+    if data == "up":
+        return True
+    elif data == "down":
+        return False
+    else:
+        raise ValueError(f"Found value '{data}' in {dir}operstate")
+
 def generate(dir, verbose=False):
     """
     Create a subfolder XXXX in dir, where XXXX is the lowest available folder from 0000 to 9999.
@@ -209,7 +229,11 @@ def receive(dir, filename, verbose=False, no_shred=False):
 
 if __name__=="__main__":
 
-    # TODO : detect if network interface is up
+    # Check that no network interface is up
+    for interface in os.listdir("/sys/class/net/"):
+        if interface != "lo" and interface_is_up("/sys/class/net/"+interface):
+            print("Please desactivate any network interface before using this program")
+            exit(1)
 
     # Argument parsing
     parser = argparse.ArgumentParser(description='Generate, send or recieve a message throught a OTP cypher.')
