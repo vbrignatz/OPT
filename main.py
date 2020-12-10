@@ -151,7 +151,7 @@ def send(dir, text, verbose=False, no_shred=False):
     
     # shred pad file
     if not no_shred:
-        subprocess.run(f"shred {dir}{first_available_pad}".split(' '))
+        subprocess.run(f"shred -u {dir}{first_available_pad}".split(' '))
         if verbose:
             print(f"[S] Shredded {dir}{first_available_pad}")
 
@@ -224,7 +224,7 @@ def receive(dir, filename, verbose=False, no_shred=False):
 
     # shred pad file
     if not no_shred:
-        subprocess.run(f"shred {dir}{idx:02d}c".split(' '))
+        subprocess.run(f"shred -u {dir}{idx:02d}c".split(' '))
         if verbose:
             print(f"[R] Shredded {dir}{idx:02d}c")
 
@@ -270,7 +270,8 @@ if __name__=="__main__":
     # Behave according to selected mode
     if args.send:
         if args.filename:
-            text = args.filename
+            with open(args.filename, "r") as f:
+                text = f.read().rstrip()
         elif args.text:
             text = args.text
         else:
