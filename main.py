@@ -45,23 +45,26 @@ def generate(dir, verbose=False):
         folder = "{:04d}/".format(max(ldir)+1)
 
     # Create dir XXXX
+    if verbose:
+        print(f"[G] Creating folder {dir}{folder}")
     os.mkdir(f"{dir}{folder}")
+
+    if verbose:
+        print(f"[G] Generating random pads in {dir}{folder}")
 
     for i in range(100):
         for letter, n_bytes in {"p":48, "s":48, "c":2000}.items():
-            # with open(F"{dir}{folder}/{i:02d}{letter}", "w") as fout:
-            #     subprocess.run(f"hexdump -n {n_bytes} /dev/random".split(" "), stdout=fout)
-            # TODO : remove display
-            subprocess.run(f"dd if=/dev/urandom of={dir}{folder}/{i:02d}{letter} bs=1 count={n_bytes}".split(" "))
+            subprocess.run(f"dd if=/dev/urandom of={dir}{folder}/{i:02d}{letter} bs=1 count={n_bytes} status=none".split(" "))
 
-    print(f"Genetrated files in {dir}{folder}")
+    print(f"[G] Genetrated pads in {dir}{folder}")
 
-def send(dir, text, verbose=False):
+def send(dir, text, verbose=False, no_shred=False):
     """
     dir should be /pads/0000/
     """
 
-    # TODO: check that dir exist
+    if not os.path.exists(dir):
+        raise Warning(f"No such directory {dir}")
 
     available_pads = [filename for filename in os.listdir(dir) if filename.endswith("c")]
     if len(available_pads) <= 0:
@@ -69,7 +72,7 @@ def send(dir, text, verbose=False):
     first_available_pad = sorted(available_pads)[0]
 
     if verbose:
-        print(f"[S] Using pad : {first_available_pad} in {dir}{folder}")
+        print(f"[S] Using pad : {first_available_pad} in {dir}")
 
     output_filename = dir.replace('/', '-')+first_available_pad.replace('c', 't')
     output_data = b''
@@ -99,21 +102,25 @@ def send(dir, text, verbose=False):
 
     if verbose:
         print(f"[S] Wrote encrypted text in {output_filename}")
+    
+    subprocess.run(f"shred {dir}{first_available_pad}".split(' '))
+    if verbose:
+        print(f"[S] Shredded {dir}{first_available_pad}")
 
-    # TODO: destroy first_available_pad
-
-
-def receive(dir, filename, verbose=False):
+def receive(dir, filename, verbose=False, no_shred=False):
     """
     dir should be /pads/0000/
     """
+
+    if not os.path.exists(dir):
+        raise Warning(f"No such directory {dir}")
 
     # read the data from the file
     with open(filename, "rb") as fin:
         data = fin.read()
 
     if verbose:
-        print(f"[R] Red {len(data)} bytes from {filename}")
+        print(f"[R] Read {len(data)} bytes from {filename}")
 
     # Get prefix and suffix
     prefix, suffix = data[:48], data[-48:]
@@ -131,7 +138,10 @@ def receive(dir, filename, verbose=False):
     if verbose:
         print(f"[R] Found idx from prefix : idx={idx}")
 
-    # TODO: also check suffix
+    # Also check that the suffix is similar
+    with open(dir+f"{idx:02d}s", "rb") as file_suffix:
+        if file_suffix.read(48) != suffix:
+            raise Warning(f"Found prefix in {dir}{idx:02d}p but {dir}{idx:02d}s doesnt not contain suffix")
 
     if verbose:
         print(f"[R] Suffix validated with idx={idx}")
@@ -152,6 +162,11 @@ def receive(dir, filename, verbose=False):
 
     if verbose:
         print(f"[R] Wrote message in '{filename.replace('t', 'm')}'")
+
+    if not no_shred:
+        subprocess.run(f"shred {dir}{idx:02d}c".split(' '))
+        if verbose:
+            print(f"[R] Shredded {dir}{idx:02d}c")
 
 if __name__=="__main__":
 
@@ -174,13 +189,13 @@ if __name__=="__main__":
                         help='If specified, will set script in generate mode (default is generate)')
     parser.add_argument('-v', "--verbose", action="store_true",
                         help='If specified, will print informations about the process')
+    parser.add_argument("--no-shred", action="store_true",
+                        help='If specified, the script wont shred the pads')
 
     args = parser.parse_args()
 
     if args.directory[-1] != "/":
         args.directory += "/"
-
-    print(args.filename)
 
     if sum([args.send, args.receive, args.generate]) > 1:
         raise Warning("User specified more than one mode, please select only one mode using -s, -r or -g")
@@ -192,10 +207,12 @@ if __name__=="__main__":
             text = args.text
         else:
             text = "test message" # TODO : use standar input
-        send(args.directory, text, args.verbose)
+        if len(text) > 2000:
+            raise Warning("Message too long. Max message lenght is 2000 characters.")
+        send(args.directory, text, verbose=args.verbose, no_shred=args.no_shred)
     elif args.receive:
         if not args.filename:
             raise Warning("User should specify a filename when using receive mode")
-        receive(args.directory, args.filename, args.verbose)
+        receive(args.directory, args.filename, verbose=args.verbose, no_shred=args.no_shred)
     else:
-        generate(args.directory)
+        generate(args.directory, verbose=args.verbose)

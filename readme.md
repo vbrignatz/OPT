@@ -28,4 +28,40 @@ If the message is too long to fit in one pad, the program will exit with an erro
 The transmission to decrypt should be specified as a second positional argument
 filename.
 
+## Exemple
 
+I create my pads using :
+```
+./main.py pads/ -g
+```
+
+The script shows : 
+```
+Genetrated files in pads/0000/
+```
+
+Then, I encrypt my message (with verbose activated for purpose of this tutorial):
+```
+./main.py pads/0000/ -s -t "This is a very secret message" --verbose
+```
+
+The scripts shows :
+```
+[S] Using pad : 00c in pads/0000/
+[S] Encrypted data is b"\xc0#Uo\x85\xe7mO\x18\xc3\xdb\x9e\x03\x96Z[\x0e7\x85'\x91Xxa\x08\xa9\xad&."
+[S] Wrote encrypted text in pads-0000-00t
+```
+
+Then, I can decypher the message with :
+```
+./main.py pads/0000/ pads-0000-00t -r --verbose
+```
+
+The script shows :
+```
+[R] Read 125 bytes from pads-0000-00t
+[R] Found idx from prefix : idx=0
+[R] Suffix validated with idx=0
+[R] Found message 'This is a very secret message'
+[R] Wrote message in 'pads-0000-00m'
+```
